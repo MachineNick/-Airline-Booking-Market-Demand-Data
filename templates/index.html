@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Airline Booking Market Demand</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto p-4">
+        <h1 class="text-3xl font-bold mb-4">Airline Booking Market Demand Analysis</h1>
+        
+        <!-- Data Input Form -->
+        <div class="bg-white p-6 rounded shadow mb-6">
+            <h2 class="text-xl font-semibold mb-4">Fetch Flight Data</h2>
+            <form id="dataForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium">Origin Airport (IATA)</label>
+                    <select id="origin" name="origin" class="w-full p-2 border rounded" required>
+                        <option value="" disabled selected>Select origin</option>
+                        <option value="SYD">Sydney (SYD)</option>
+                        <option value="MEL">Melbourne (MEL)</option>
+                        <option value="BNE">Brisbane (BNE)</option>
+                        <option value="PER">Perth (PER)</option>
+                        <option value="ADL">Adelaide (ADL)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium">Destination Airport (IATA)</label>
+                    <select id="destination" name="destination" class="w-full p-2 border rounded" required>
+                        <option value="" disabled selected>Select destination</option>
+                        <option value="MEL">Melbourne (MEL)</option>
+                        <option value="SYD">Sydney (SYD)</option>
+                        <option value="BNE">Brisbane (BNE)</option>
+                        <option value="PER">Perth (PER)</option>
+                        <option value="ADL">Adelaide (ADL)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium">Flight Date (YYYY-MM-DD)</label>
+                    <input type="date" id="date" name="date" class="w-full p-2 border rounded" required>
+                </div>
+                <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Fetch Data</button>
+            </form>
+            <div id="message" class="mt-4 text-red-500"></div>
+        </div>
+
+        <!-- Insights Section -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Popular Routes -->
+            <div class="bg-white p-6 rounded shadow">
+                <h2 class="text-xl font-semibold mb-4">Popular Routes</h2>
+                <canvas id="routesChart"></canvas>
+            </div>
+
+            <!-- Price Trends -->
+            <div class="bg-white p-6 rounded shadow">
+                <h2 class="text-xl font-semibold mb-4">Price Trends</h2>
+                <canvas id="priceChart"></canvas>
+            </div>
+
+            <!-- Demand Periods -->
+            <div class="bg-white p-6 rounded shadow">
+                <h2 class="text-xl font-semibold mb-4">High-Demand Periods</h2>
+                <canvas id="demandChart"></canvas>
+            </div>
+
+            <!-- In-Air Flights -->
+            <div class="bg-white p-6 rounded shadow">
+                <h2 class="text-xl font-semibold mb-4">In-Air Flights</h2>
+                <table id="inAirTable" class="w-full border-collapse">
+                    <thead>
+                        <tr class="bg-gray-200">
+                            <th class="border p-2">Airline</th>
+                            <th class="border p-2">Flight</th>
+                            <th class="border p-2">From</th>
+                            <th class="border p-2">To</th>
+                            <th class="border p-2">Date</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Verify CDN loading
+        console.log('Tailwind CSS loaded:', typeof tailwind !== 'undefined');
+        console.log('Chart.js loaded:', typeof Chart !== 'undefined');
+
+        document.getElementById('dataForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            console.log('Form submit event triggered');
+            const formData = new FormData(e.target);
+            const formValues = Object.fromEntries(formData);
+            console.log('Form data:', formValues);
+            try {
+                const response = await fetch('/fetch_data', {
+                    method: 'POST',
+                    body: formData
+                });
+                console.log('Fetch response status:', response.status);
+                const result = await response.json();
+                console.log('Fetch response data:', result);
+                const messageDiv = document.getElementById('message');
+                messageDiv.innerText = result.message || result.error || 'An unexpected error occurred';
+                if (response.ok) {
+                    messageDiv.classList.remove('text-red-500');
+                    messageDiv.classList.add('text-green-500');
+                    fetchInsights();
+                } else {
+                    messageDiv.classList.add('text-red-500');
+                }
+            } catch (error) {
+                console.error('Form submission error:', error);
+                document.getElementById('message').innerText = `Error: ${error.message}. Check console for details.`;
+            }
+        });
+
+        async function fetchInsights() {
+            try {
+                const response = await fetch('/insights');
+                console.log('Insights response status:', response.status);
+                const data = await response.json();
+                console.log('Insights data:', data);
+
+                // Destroy existing charts to prevent overlap
+                ['routesChart', 'priceChart', 'demandChart'].forEach(chartId => {
+                    const chart = Chart.getChart(chartId);
+                    if (chart) chart.destroy();
+                });
+
+                // Popular Routes Chart
+                const routesCtx = document.getElementById('routesChart').getContext('2d');
+                new Chart(routesCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.popular_routes.map(r => r.route),
+                        datasets: [{
+                            label: 'Flight Count',
+                            data: data.popular_routes.map(r => r.count),
+                            backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        scales: { y: { beginAtZero: true } }
+                    }
+                });
+
+                // Price Trends Chart
+                const priceCtx = document.getElementById('priceChart').getContext('2d');
+                new Chart(priceCtx, {
+                    type: 'line',
+                    data: {
+                        labels: data.price_trends.map(t => t.date),
+                        datasets: [{
+                            label: 'Average Price',
+                            data: data.price_trends.map(t => t.price),
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            fill: false
+                        }]
+                    },
+                    options: {
+                        scales: { y: { beginAtZero: true } }
+                    }
+                });
+
+                // Demand Periods Chart
+                const demandCtx = document.getElementById('demandChart').getContext('2d');
+                new Chart(demandCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.demand_periods.map(p => `Month ${p.month}`),
+                        datasets: [{
+                            label: 'Flight Count',
+                            data: data.demand_periods.map(p => p.count),
+                            backgroundColor: 'rgba(255, 99, 132, 0.5)',
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        scales: { y: { beginAtZero: true } }
+                    }
+                });
+
+                // In-Air Flights Table
+                const tableBody = document.querySelector('#inAirTable tbody');
+                tableBody.innerHTML = '';
+                data.in_air_flights.forEach(flight => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="border p-2">${flight.airline}</td>
+                        <td class="border p-2">${flight.flight_iata || 'N/A'}</td>
+                        <td class="border p-2">${flight.departure}</td>
+                        <td class="border p-2">${flight.arrival}</td>
+                        <td class="border p-2">${flight.flight_date}</td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+            } catch (error) {
+                console.error('Insights fetch error:', error);
+                document.getElementById('message').innerText = `Error fetching insights: ${error.message}. Check console for details.`;
+            }
+        }
+
+        // Initial fetch of insights
+        fetchInsights();
+    </script>
+</body>
+</html>
